@@ -1,0 +1,611 @@
+%
+% frequency_response_and_eigenfrequencies_spring_foundation.m
+%
+% Model exported on Dec 26 2018, 03:36 by COMSOL 5.2.0.220.
+% For the explanation of the purpose of this file, see the "readme.txt"
+% file
+
+% This code consists of the 3 parts:
+% - Part I - model definition
+% - Part II -  STUDY1:  the eigenfrequency study
+% - Part III - STUDY2: the frequency response study
+% - Part IV - STUDY3: the time domain study
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%               PART I
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+import com.comsol.model.*
+import com.comsol.model.util.*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%       These are the standard settings, do not alter them
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+model = ModelUtil.create('Model');
+% model.modelPath('C:\codes\DM_paper');
+% model.label('frequency_response_and_eigenfrequencies_spring_foundation.mph');
+% model.comments(['Untitled\n\n']);
+model.modelNode.create('comp1');
+model.geom.create('geom1', 2);
+model.mesh.create('mesh1', 'geom1');
+model.geom('geom1').create('c1', 'Circle');
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%    Here I create a list of points for actuation and spring foundation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% here we generate points inside of the circle of radius 1
+pts_circle=[];
+stepp=0.2;
+[X,Y]=meshgrid([-1:stepp:1],[-1:stepp:1])
+pts=[X(:) Y(:)];
+indx=1;
+[s1,~]=size(pts);
+%plot(pts(:,1),pts(:,2),'x');
+for i=1:s1
+  if sqrt(pts(i,1)^2+pts(i,2)^2)<1  
+     pts_circle(indx,:)=pts(i,:);
+     indx=indx+1;
+  end
+end
+% here you can visualize the points
+% plot(pts_circle(:,1),pts_circle(:,2),'x');
+
+% Here we define the COMSOL points on the basis of the previously defined
+% points
+string_pt='pt';
+[s1,s2]=size(pts_circle);
+for i=1:s1
+        chr = int2str(i);
+        model.geom('geom1').create(strcat(string_pt,chr), 'Point');    
+        xValue=pts_circle(i,1);
+        yValue=pts_circle(i,2);
+        model.geom('geom1').feature(strcat(string_pt,chr)).setIndex('p', mat2str(xValue), 0, 0);
+        model.geom('geom1').feature(strcat(string_pt,chr)).setIndex('p', mat2str(yValue), 1, 0);
+       % model.geom('geom1').feature(strcat(string_pt,chr)).setIndex('p',
+       % '0', 2, 0); % this is for the 3D case- I do not need it
+end
+model.geom('geom1').run;
+model.geom('geom1').run('fin');
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%            end of the point definitions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% do not alter this
+model.view.create('view2', 3);
+model.view.create('view3', 3);
+model.view.create('view4', 3);
+model.view.create('view5', 2);
+
+% do not alter this
+model.material.create('mat1', 'Common', 'comp1');
+model.physics.create('plate', 'Plate', 'geom1');
+
+% here, the boundary conditions are created
+model.physics('plate').create('fix1', 'Fixed', 1);
+model.physics('plate').feature('fix1').selection.set([1 2 3 4]);
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%    Here we define the point loads and the mass spring foundation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+string_pl='pl';
+
+% uncomment this for the final model, when you extract the matrices
+% for i=1:s1
+%     chr = int2str(i);
+%     xValue=pts_circle(i,1);
+%     yValue=pts_circle(i,2);        
+%     model.physics('plate').create(strcat(string_pl,chr), 'PointLoad', 0);
+%     model.physics('plate').feature(strcat(string_pl,chr)).selection.set(mphselectcoords(model,'geom1',[xValue yValue]','point',...
+% 'radius',0.003));
+%     model.physics('plate').feature(strcat(string_pl,chr)).set('Fp', {'0' '0' '1'});    
+% end
+
+% this is used to compare the model with the undamped model that does not
+% have mass-spring foundation
+% for the step response and the frequency analysis we only need one input
+% force
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  we use this to visualize the points, this is important for properly
+%  selecting the points where the force acts...
+
+mphgeom(model,'geom1','facelabels','on')
+mphgeom(model,'geom1','edgelabels','on','facealpha',0.15);
+mphgeom(model,'geom1', 'vertexmode', 'on', 'facealpha',0.1);
+hold on
+mphgeom(model,'geom1', 'vertexlabels', 'on','facealpha',0);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+model.physics('plate').create('pl1', 'PointLoad', 0);
+
+% use this for dense actuator configurations
+%model.physics('plate').feature('pl1').selection.set(mphselectcoords(model,'geom1',[-0.3 -0.3]','point',...'radius',0.003));
+
+% use this for coarse actuator configurations
+model.physics('plate').feature('pl1').selection.set([16])
+model.physics('plate').feature('pl1').set('Fp', {'0' '0' '1'}); 
+
+% 
+%  set the mass-spring foundation and the point masses
+
+% set the stiffness and damping constants
+stiffness = int2str(10^4);
+damping = int2str(500);
+mass=int2str(0.3);
+
+% spring-damper foundation
+string_spf='spf';
+
+% point mass
+string_pm='pm';
+for i=1:s1
+    chr = int2str(i);
+    xValue=pts_circle(i,1);
+    yValue=pts_circle(i,2);        
+    model.physics('plate').create(strcat(string_spf,chr), 'SpringFoundation0', 0);
+    model.physics('plate').feature(strcat(string_spf,chr)).selection.set(mphselectcoords(model,'geom1',[xValue yValue]','point',...
+'radius',0.003));
+
+    model.physics('plate').create(strcat(string_pm,chr), 'PointMass', 0);
+    model.physics('plate').feature(strcat(string_pm,chr)).selection.set(mphselectcoords(model,'geom1',[xValue yValue]','point',...
+'radius',0.003));
+    % model.physics('plate').feature(strcat(string_pl,chr)).set('Fp', {'0' '0' '1'});    
+   
+   
+   
+   
+     % this was original
+     model.physics('plate').feature(strcat(string_spf,chr)).set('kSpring', {stiffness; '0'; '0'; '0'; stiffness; '0'; '0'; '0'; stiffness});
+     model.physics('plate').feature(strcat(string_spf,chr)).set('DampTot', {damping; '0'; '0'; '0'; damping; '0'; '0'; '0'; damping});  % here I used zero damping, change this in the final model
+     % model.physics('plate').feature(strcat(string_spf,chr)).set('DampTot',{'1000'; '0'; '0'; '0'; '1000'; '0'; '0'; '0'; '1000'}); 
+     model.physics('plate').feature(strcat(string_pm,chr)).set('pointmass', mass);
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% this was original, we do not need it
+% 
+% model.physics('plate').create('pl1', 'PointLoad', 0);
+% model.physics('plate').feature('pl1').selection.set([2]);
+% model.physics('plate').create('spf1', 'SpringFoundation0', 0);
+% model.physics('plate').feature('spf1').selection.set([4]);
+% model.physics('plate').create('spf2', 'SpringFoundation0', 0);
+% model.physics('plate').feature('spf2').selection.set([6]);
+
+% model.view('view1').axis.set('abstractviewxscale', '0.0042553190141916275');
+% model.view('view1').axis.set('ymin', '-1.100000023841858');
+% model.view('view1').axis.set('xmax', '1.985106348991394');
+% model.view('view1').axis.set('abstractviewyscale', '0.0042553190141916275');
+% model.view('view1').axis.set('abstractviewbratio', '-0.050000011920928955');
+% model.view('view1').axis.set('abstractviewtratio', '0.050000011920928955');
+% model.view('view1').axis.set('abstractviewrratio', '0.492553174495697');
+% model.view('view1').axis.set('xmin', '-1.985106348991394');
+% model.view('view1').axis.set('abstractviewlratio', '-0.492553174495697');
+% model.view('view1').axis.set('ymax', '1.100000023841858');
+% model.view('view5').axis.set('ymin', '-9.437143325805664');
+% model.view('view5').axis.set('xmax', '3.3340401649475098');
+% model.view('view5').axis.set('xmin', '-0.033010244369506836');
+% model.view('view5').axis.set('ymax', '-4.28508186340332');
+
+
+
+% material constants
+model.material('mat1').propertyGroup('def').set('youngsmodulus', '9.03*1e10');
+model.material('mat1').propertyGroup('def').set('poissonsratio', '0.24');
+model.material('mat1').propertyGroup('def').set('density', '2530');
+model.physics('plate').prop('d').set('d', '0.003[m]');
+
+
+model.mesh('mesh1').autoMeshSize(9);
+% 9 - extremely coarse  
+% 8 - extra coarse
+model.mesh('mesh1').run;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%        from here the blocks can be executed independently 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%        STUDY1:  the eigenfrequency study
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+model.study.create('std1');
+model.study('std1').create('eig', 'Eigenfrequency');
+model.sol.create('sol1');
+model.sol('sol1').study('std1');
+model.sol('sol1').attach('std1');
+model.sol('sol1').create('st1', 'StudyStep');
+model.sol('sol1').create('v1', 'Variables');
+model.sol('sol1').create('e1', 'Eigenvalue');
+
+% how many eigenfrequencies we have
+model.study('std1').feature('eig').set('neigs', '80');
+model.study('std1').feature('eig').set('neigsactive', true);
+model.sol('sol1').attach('std1');
+model.sol('sol1').feature('e1').set('neigs', '80');
+model.sol('sol1').feature('e1').set('transform', 'eigenfrequency');
+model.sol('sol1').runAll;
+
+
+model.result.create('pg1', 'PlotGroup2D');
+model.result('pg1').create('surf1', 'Surface');
+model.result('pg1').feature('surf1').create('hght', 'Height');
+
+
+
+% eigenfrequencie plots
+model.result('pg1').label('Mode Shape (plate)');
+%here you select the eigenfrequency number
+model.result('pg1').set('looplevel', {'3'});
+model.result('pg1').feature('surf1').set('expr', 'w');
+model.result('pg1').feature('surf1').set('descr', 'Displacement field, z component');
+model.result('pg1').feature('surf1').feature('hght').set('scale', '2.6841497047451086');
+model.result('pg1').feature('surf1').feature('hght').set('scaleactive', false);
+
+pd=mphplot(model,'pg1');
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%           END OF STUDY 1: end of the eigenfrequency study
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%         STUDY 2: the frequency response study
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+model.study.create('std2');
+model.study('std2').create('freq', 'Frequency');
+model.sol.create('sol2');
+model.sol('sol2').study('std2');
+model.sol('sol2').attach('std2');
+model.sol('sol2').create('st1', 'StudyStep');
+model.sol('sol2').create('v1', 'Variables');
+model.sol('sol2').create('s1', 'Stationary');
+model.sol('sol2').feature('s1').create('p1', 'Parametric');
+model.sol('sol2').feature('s1').create('fc1', 'FullyCoupled');
+model.sol('sol2').feature('s1').feature.remove('fcDef');
+model.study('std2').feature('freq').set('plist', 'range(0,1,2000)');
+model.sol('sol2').attach('std2');
+model.sol('sol2').feature('s1').feature('p1').set('punit', {'Hz'});
+model.sol('sol2').feature('s1').feature('p1').set('plistarr', {'range(0,1,2000)'});
+model.sol('sol2').feature('s1').feature('p1').set('pname', {'freq'});
+model.sol('sol2').feature('s1').feature('p1').set('pcontinuationmode', 'no');
+model.sol('sol2').feature('s1').feature('p1').set('preusesol', 'auto');
+model.sol('sol2').runAll;
+
+
+
+
+% I do not need this one
+
+% model.result.create('pg2', 'PlotGroup2D');
+% model.result('pg2').set('data', 'dset2');
+% model.result('pg2').create('surf1', 'Surface');
+% model.result('pg2').feature('surf1').create('hght', 'Height');
+% model.result('pg2').label('Stress Top (plate)');
+% model.result('pg2').set('looplevel', {'1001'});
+% model.result('pg2').feature('surf1').set('expr', 'plate.mises');
+% model.result('pg2').feature('surf1').set('descr', 'von Mises stress');
+% model.result('pg2').feature('surf1').set('unit', 'N/m^2');
+% model.result('pg2').feature('surf1').feature('hght').set('scale', '9393547.417454623');
+% model.result('pg2').feature('surf1').feature('hght').set('heightdata', 'expr');
+% model.result('pg2').feature('surf1').feature('hght').set('descr', 'Displacement field, z component');
+% model.result('pg2').feature('surf1').feature('hght').set('expr', 'w');
+% model.result('pg2').feature('surf1').feature('hght').set('scaleactive', false);
+
+
+
+
+
+model.result.create('pg3', 'PlotGroup1D');
+
+% BE CAREFUL HERE: IF YOU EXECUTE THIS (ORIGINAL COMSOL)
+% model.result('pg3').set('data', 'dset2');
+% INDEPENDENTLY FROM THE FIRST STURY, YOU WILL GET AN ERROR- THIS IS WHY
+% THE 'dset2' has to be changed to 'dset1'
+
+model.result('pg3').set('data', 'dset1');
+model.result('pg3').create('ptgr1', 'PointGraph');
+model.result('pg3').create('ptgr2', 'PointGraph');
+
+% here select the observation point for the frequency domain analysis
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  we use this to visualize the points, this is important for properly
+%  selecting the points where the force acts...
+
+mphgeom(model,'geom1','facelabels','on')
+mphgeom(model,'geom1','edgelabels','on','facealpha',0.15);
+mphgeom(model,'geom1', 'vertexmode', 'on', 'facealpha',0.1);
+hold on
+mphgeom(model,'geom1', 'vertexlabels', 'on','facealpha',0);
+
+%model.result('pg3').feature('ptgr1').selection.set([16]);   % this selection is close to (-0.3,-0.3)
+
+model.result('pg3').feature('ptgr1').selection.set([37]);  % this selection is at (0,0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+% use this for dense actuator configurations
+%model.result('pg3').feature('ptgr1').selection.set(mphselectcoords(model,'geom1',[-0.3 -0.3]','point',...'radius',0.2));
+
+
+
+
+% we do not want the phase diagram
+% model.result('pg3').feature('ptgr2').set('data', 'dset1');
+% model.result('pg3').feature('ptgr2').selection.set([33]);
+
+model.result('pg3').label('Frequency response at (0,0)');
+model.result('pg3').set('xlabel', 'freq (Hz)');
+model.result('pg3').set('ylabel', 'Displacement phase, z component (rad)');
+model.result('pg3').set('xlog', true);
+model.result('pg3').set('ylog', true);
+model.result('pg3').set('ylabelactive', false);
+model.result('pg3').set('xlabelactive', false);
+model.result('pg3').feature('ptgr1').label('P(0,0)');
+model.result('pg3').feature('ptgr1').set('descr', 'Displacement amplitude, z component');
+model.result('pg3').feature('ptgr1').set('expr', 'plate.uAmpz');
+model.result('pg3').feature('ptgr1').set('descr', 'Displacement amplitude, z component');
+model.result('pg3').feature('ptgr1').set('unit', 'm');
+
+% we do not want the phase graph
+model.result('pg3').feature('ptgr2').label('P(0,0) phase');
+model.result('pg3').feature('ptgr2').set('descr', 'Displacement phase, z component');
+model.result('pg3').feature('ptgr2').set('expr', 'plate.uPhasez');
+model.result('pg3').feature('ptgr2').set('unit', 'rad');
+model.result('pg3').feature('ptgr2').set('descr', 'Displacement phase, z component');
+
+
+
+pd=mphplot(model,'pg3');
+% this is enough to plot the results
+plot(20*log10(pd{1}{1}.d),'k')
+% 
+% model.result.create('pg4', 'PlotGroup1D');
+% model.result('pg4').set('data', 'dset1');
+% model.result('pg4').create('ptgr1', 'PointGraph');
+%model.result('pg4').create('ptgr2', 'PointGraph');
+
+% here select the observation point for the frequency domain analysis
+% model.result('pg3').feature('ptgr1').selection.set(mphselectcoords(model,'geom1',[-0.3 -0.3]','point',...
+% 'radius',0.003));
+% 
+% %model.result('pg4').feature('ptgr1').selection.set([2]);
+% 
+% 
+% %model.result('pg4').feature('ptgr2').selection.set([2]);
+% model.result('pg4').label('Frequency response at (-0.3,-0.3)');
+% model.result('pg4').set('xlabel', 'freq (Hz)');
+% model.result('pg4').set('ylabel', 'Displacement amplitude, z component (m)');
+% model.result('pg4').set('xlog', true);
+% model.result('pg4').set('ylog', true);
+% model.result('pg4').set('ylabelactive', false);
+% model.result('pg4').set('xlabelactive', false);
+% model.result('pg4').feature('ptgr1').label('P(-0.3,-0.3)');
+% model.result('pg4').feature('ptgr1').set('descr', 'Displacement amplitude, z component');
+% model.result('pg4').feature('ptgr1').set('expr', 'plate.uAmpz');
+% model.result('pg4').feature('ptgr1').set('descr', 'Displacement amplitude, z component');
+% model.result('pg4').feature('ptgr1').set('unit', 'm');
+
+%model.result('pg4').feature('ptgr2').label('P(-0.3,-0.3) phase');
+%model.result('pg4').feature('ptgr2').set('descr', 'Displacement phase, z component');
+%model.result('pg4').feature('ptgr2').set('expr', 'plate.uPhasez');
+%model.result('pg4').feature('ptgr2').set('unit', 'rad');
+%model.result('pg4').feature('ptgr2').set('descr', 'Displacement phase, z component');
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%             END OF STUDY 2: end of the frequency response study
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%             STUDY 3: the time domain study
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+model.study.create('std3');
+model.study('std3').create('time', 'Transient');
+model.sol.create('sol3');
+model.sol('sol3').study('std3');
+model.sol('sol3').attach('std3');
+model.sol('sol3').create('st1', 'StudyStep');
+model.sol('sol3').create('v1', 'Variables');
+model.sol('sol3').create('t1', 'Time');
+model.sol('sol3').feature('t1').create('fc1', 'FullyCoupled');
+model.sol('sol3').feature('t1').feature.remove('fcDef');
+model.study('std3').feature('time').set('tlist', 'range(0,0.0001,0.3)');
+model.sol('sol3').attach('std3');
+model.sol('sol3').feature('v1').feature('comp1_u').set('scalemethod', 'manual');
+model.sol('sol3').feature('v1').feature('comp1_u').set('scaleval', '1e-2*2.8284271247461903');
+model.sol('sol3').feature('t1').set('timemethod', 'genalpha');
+model.sol('sol3').feature('t1').set('tlist', 'range(0,0.0001,0.3)');
+model.sol('sol3').runAll;
+
+
+model.result.create('pg5', 'PlotGroup2D');
+model.result('pg5').set('data', 'dset1');
+model.result('pg5').create('surf1', 'Surface');
+model.result('pg5').feature('surf1').create('hght', 'Height');
+model.result('pg5').label('Deformations');
+model.result('pg5').set('legendactive', 'on');
+model.result('pg5').set('axisactive', 'on');
+model.result('pg5').set('looplevel', {'3001'});
+model.result('pg5').feature('surf1').set('expr', 'w');
+model.result('pg5').feature('surf1').set('resolution', 'fine');
+model.result('pg5').feature('surf1').set('descr', 'Displacement field, z component');
+model.result('pg5').feature('surf1').feature('hght').set('scaleactive', true);
+model.result('pg5').feature('surf1').feature('hght').set('scale', '10000');
+model.result('pg5').feature('surf1').feature('hght').set('heightdata', 'expr');
+model.result('pg5').feature('surf1').feature('hght').set('descr', 'Displacement field, z component');
+model.result('pg5').feature('surf1').feature('hght').set('expr', 'w');
+
+pd=mphplot(model,'pg5');
+
+
+
+model.result.create('pg6', 'PlotGroup1D');
+model.result('pg6').create('ptgr1', 'PointGraph');
+model.result('pg6').create('ptgr2', 'PointGraph');
+model.result('pg6').create('ptgr3', 'PointGraph');
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  we use this to visualize the points, this is important for properly
+%  selecting the points where the force acts...
+
+mphgeom(model,'geom1','facelabels','on')
+mphgeom(model,'geom1','edgelabels','on','facealpha',0.15);
+mphgeom(model,'geom1', 'vertexmode', 'on', 'facealpha',0.1);
+hold on
+mphgeom(model,'geom1', 'vertexlabels', 'on','facealpha',0);
+
+%model.result('pg3').feature('ptgr1').selection.set([16]);   % this selection is close to (-0.4,-0.4)
+
+% model.result('pg3').feature('ptgr1').selection.set([37]);  % this selection is at (0,0)
+
+% model.result('pg3').feature('ptgr1').selection.set([58]);  % this selection is at (0.4,0.4)
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+model.result('pg6').feature('ptgr1').set('data', 'dset1');
+model.result('pg6').feature('ptgr1').selection.set([16]);  % 16 is at -0.4,-0.4
+model.result('pg6').feature('ptgr2').set('data', 'dset1');
+model.result('pg6').feature('ptgr2').selection.set([26]);  % 26 is at -0.2,-0.2
+model.result('pg6').feature('ptgr3').set('data', 'dset1');
+model.result('pg6').feature('ptgr3').selection.set([37]);  % 37 is at 0,0 
+model.result('pg6').label('Time response');
+model.result('pg6').set('xlabel', 'Time (s)');
+model.result('pg6').set('ylabel', 'Displacement field, z component (m)');
+model.result('pg6').set('ylabelactive', false);
+model.result('pg6').set('xlabelactive', false);
+model.result('pg6').feature('ptgr1').label('P1');
+model.result('pg6').feature('ptgr1').set('descr', 'Displacement field, z component');
+model.result('pg6').feature('ptgr1').set('expr', 'w');
+model.result('pg6').feature('ptgr2').label('P2');
+model.result('pg6').feature('ptgr3').label('P3');
+
+
+pd=mphplot(model,'pg6');
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                end of the time domain study
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% We do not need to export the result since we can plot directly from
+% MATLAB
+
+% model.result.export.create('img1', 'Image3D');
+% model.result.export.create('plot1', 'Plot');
+% model.result.export.create('plot2', 'Plot');
+% model.result.export.create('img2', 'Image2D');
+% model.result.export.create('plot3', 'Plot');
+% model.result.export.create('plot4', 'Plot');
+% model.result.export.create('plot5', 'Plot');
+% model.result.export.create('plot6', 'Plot');
+% model.result.export.create('plot7', 'Plot');
+% model.result.export('img1').set('jpegfilename', 'C:\Users\ahaber\Desktop\papers\DM control paper\figures\8_645.jpg');
+% model.result.export('img1').set('view', 'new');
+% model.result.export('img1').set('qualitylevel', '100');
+% model.result.export('img1').set('imagetype', 'jpeg');
+% model.result.export('img1').set('logo', false);
+% model.result.export('img1').set('background', 'color');
+% model.result.export('img1').set('printunit', 'mm');
+% model.result.export('img1').set('webunit', 'px');
+% model.result.export('img1').set('printheight', '90');
+% model.result.export('img1').set('webheight', '600');
+% model.result.export('img1').set('printwidth', '120');
+% model.result.export('img1').set('webwidth', '800');
+% model.result.export('img1').set('printlockratio', 'off');
+% model.result.export('img1').set('weblockratio', 'off');
+% model.result.export('img1').set('printresolution', '300');
+% model.result.export('img1').set('webresolution', '96');
+% model.result.export('img1').set('size', 'current');
+% model.result.export('img1').set('antialias', 'off');
+% model.result.export('img1').set('zoomextents', 'off');
+% model.result.export('img1').set('title', 'off');
+% model.result.export('img1').set('legend', 'on');
+% model.result.export('img1').set('logo', 'off');
+% model.result.export('img1').set('options', 'on');
+% model.result.export('img1').set('fontsize', '12');
+% model.result.export('img1').set('customcolor', [1 1 1]);
+% model.result.export('img1').set('background', 'color');
+% model.result.export('img1').set('axisorientation', 'off');
+% model.result.export('img1').set('grid', 'on');
+% model.result.export('img1').set('qualitylevel', '100');
+% model.result.export('img1').set('qualityactive', 'on');
+% model.result.export('img1').set('imagetype', 'jpeg');
+% model.result.export('plot1').label('Frequency response at (-0.3,-0.3)');
+% model.result.export('plot1').set('plotgroup', 'pg4');
+% model.result.export('plot1').set('filename', 'C:\codes\DM_paper\frequency_response_P1_damped_rayleigh.txt');
+% model.result.export('plot2').label('Frequency response at (0,0)');
+% model.result.export('plot2').set('plotgroup', 'pg3');
+% model.result.export('plot2').set('filename', 'C:\codes\DM_paper\frequency_response_P2_damped_rayleigh.txt');
+% model.result.export('img2').label('Global deformation');
+% model.result.export('img2').set('pngfilename', 'C:\Users\ahaber\Desktop\papers\DM control paper\figures\3D_deformation_damped.png');
+% model.result.export('img2').set('view', 'view5');
+% model.result.export('img2').set('axisorientation', true);
+% model.result.export('img2').set('plotgroup', 'pg5');
+% model.result.export('img2').set('printunit', 'mm');
+% model.result.export('img2').set('webunit', 'px');
+% model.result.export('img2').set('printheight', '90');
+% model.result.export('img2').set('webheight', '600');
+% model.result.export('img2').set('printwidth', '120');
+% model.result.export('img2').set('webwidth', '800');
+% model.result.export('img2').set('printlockratio', 'off');
+% model.result.export('img2').set('weblockratio', 'off');
+% model.result.export('img2').set('printresolution', '300');
+% model.result.export('img2').set('webresolution', '96');
+% model.result.export('img2').set('size', 'current');
+% model.result.export('img2').set('antialias', 'off');
+% model.result.export('img2').set('zoomextents', 'off');
+% model.result.export('img2').set('title', 'off');
+% model.result.export('img2').set('legend', 'on');
+% model.result.export('img2').set('logo', 'on');
+% model.result.export('img2').set('options', 'on');
+% model.result.export('img2').set('fontsize', '12');
+% model.result.export('img2').set('customcolor', [1 1 1]);
+% model.result.export('img2').set('background', 'transparent');
+% model.result.export('img2').set('axes', 'off');
+% model.result.export('img2').set('qualitylevel', '92');
+% model.result.export('img2').set('qualityactive', 'on');
+% model.result.export('img2').set('imagetype', 'png');
+% model.result.export('plot3').label('P1_time_response');
+% model.result.export('plot3').set('plotgroup', 'pg6');
+% model.result.export('plot3').set('filename', 'C:\codes\DM_paper\P1_damped_time_response.txt');
+% model.result.export('plot4').label('P2_time_response');
+% model.result.export('plot4').set('plotgroup', 'pg6');
+% model.result.export('plot4').set('filename', 'P2_damped_time_response.txt');
+% model.result.export('plot4').set('plot', 'ptgr2');
+% model.result.export('plot5').label('P3_time_response');
+% model.result.export('plot5').set('plotgroup', 'pg6');
+% model.result.export('plot5').set('filename', 'P3_damped_time_response.txt');
+% model.result.export('plot5').set('plot', 'ptgr3');
+% model.result.export('plot6').label('Phase P2');
+% model.result.export('plot6').set('plotgroup', 'pg3');
+% model.result.export('plot6').set('filename', 'C:\codes\DM_paper\frequency_response_P2_damped_rayleigh_phase.txt');
+% model.result.export('plot6').set('plot', 'ptgr2');
+% model.result.export('plot7').label('Phase P1');
+% model.result.export('plot7').set('plotgroup', 'pg4');
+% model.result.export('plot7').set('filename', 'C:\codes\DM_paper\frequency_response_P1_damped_rayleigh_phase.txt');
+% model.result.export('plot7').set('plot', 'ptgr2');
+
